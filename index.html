@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ultimate GitHub Dashboard</title>
+
+<style>
+body {
+  font-family: Arial;
+  background: #0d1117;
+  color: white;
+  padding: 10px;
+}
+
+.container {
+  max-width: 800px;
+  margin: auto;
+}
+
+input, select, button {
+  width: 100%;
+  padding: 10px;
+  margin-top: 8px;
+  border-radius: 6px;
+  border: none;
+}
+
+button {
+  background: #238636;
+  color: white;
+}
+
+.repo {
+  background: #161b22;
+  padding: 12px;
+  margin-top: 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.repo:hover {
+  transform: scale(1.02);
+}
+
+.details {
+  background: #0d1117;
+  padding: 10px;
+  margin-top: 5px;
+  border-radius: 6px;
+}
+
+.bar {
+  height: 8px;
+  background: #30363d;
+  border-radius: 5px;
+  margin-top: 4px;
+}
+
+.fill {
+  height: 100%;
+  background: #2ea043;
+  border-radius: 5px;
+}
+
+.small {
+  font-size: 12px;
+  color: #8b949e;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+<h2>🚀 Ultimate GitHub Dashboard</h2>
+
+<input type="password" id="token" placeholder="GitHub Access Key">
+<button onclick="loadRepos()">Load Repositories</button>
+
+<input type="text" id="search" placeholder="Search..." oninput="render()">
+
+<select id="sort" onchange="render()">
+  <option value="updated">Sort by Updated</option>
+  <option value="stars">Sort by Stars</option>
+</select>
+
+<div id="repos"></div>
+</div>
+
+<script>
+let repos = [];
+
+async function loadRepos() {
+  const token = document.getElementById('token').value.trim();
+  if (!token) return alert("Token দিন");
+
+  document.getElementById('repos').innerHTML = "Loading...";
+
+  const res = await fetch("https://api.github.com/user/repos", {
+    headers: { Authorization: `token ${token}` }
+  });
+
+  repos = await res.json();
+  render();
+}
+
+function render() {
+  const search = document.getElementById('search').value.toLowerCase();
+  const sort = document.getElementById('sort').value;
+
+  let filtered = repos.filter(r => r.name.toLowerCase().includes(search));
+
+  if (sort === "stars") {
+    filtered.sort((a,b)=>b.stargazers_count - a.stargazers_count);
+  } else {
+    filtered.sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at));
+  }
+
+  const container = document.getElementById('repos');
+  container.innerHTML = "";
+
+  filtered.forEach(repo => {
+    const div = document.createElement('div');
+    div.className = "repo";
+
+    div.innerHTML = `
+      <b>${repo.name}</b>
+      <div class="small">⭐ ${repo.stargazers_count} | ${repo.language || "N/A"}</div>
+    `;
+
+    div.onclick = () => showDetails(repo, div);
+
+    container.appendChild(div);
+  });
+}
+
+async function showDetails(repo, el) {
+  if (el.querySelector('.details')) {
+    el.querySelector('.details').remove();
+    return;
+  }
+
+  const box = document.createElement('div');
+  box.className = "details";
+  box.innerHTML = "Loading...";
+
+  el.appendChild(box);
+
+  try {
+    const langRes = await fetch(repo.languages_url);
+    const langs = await langRes.json();
+
+    let total = Object.values(langs).reduce((a,b)=>a+b,0);
+
+    let langHTML = "";
+    for (let key in langs) {
+      let percent = ((langs[key]/total)*100).toFixed(1);
+      langHTML += `
+        <div class="small">${key} ${percent}%</div>
+        <div class="bar"><div class="fill" style="width:${percent}%"></div></div>
+      `;
+    }
+
+    const readmeRes = await fetch(repo.url + "/readme", {
+      headers: { Accept: "application/vnd.github.v3.raw" }
+    });
+
+    let readme = "No README";
+    if (readmeRes.ok) {
+      readme = (await readmeRes.text()).substring(0,500) + "...";
+    }
+
+    box.innerHTML = `
+      <div class="small">📅 ${new Date(repo.updated_at).toLocaleString()}</div>
+      <div class="small">${repo.private ? "🔒 Private" : "🌍 Public"}</div>
+
+      <h4>📊 Languages</h4>
+      ${langHTML}
+
+      <h4>📄 README</h4>
+      <pre class="small">${readme}</pre>
+
+      <a href="${repo.html_url}" target="_blank" style="color:#58a6ff">🔗 Open on GitHub</a>
+    `;
+  } catch {
+    box.innerHTML = "Error loading details";
+  }
+}
+</script>
+
+</body>
+</html>
